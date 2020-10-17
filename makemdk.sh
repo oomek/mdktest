@@ -1,5 +1,5 @@
 #!/bin/bash
-# touch -a main.cpp
+touch -a mdktest.cpp
 
 # download MDK for your platform from:
 # https://sourceforge.net/projects/mdk-sdk/files/
@@ -11,5 +11,6 @@
 # space - play/pause
 # left/right - prev/next file
 
-g++ -O2 -Wno-psabi -c mdktest.cpp -Iinclude/
-g++ -w mdktest.o -o mdktest -lsfml-graphics -lsfml-window -lsfml-system -lmdk
+g++ -Wno-psabi -c mdktest.cpp -Iinclude/
+g++ -o mdktest -lsfml-graphics -lsfml-window -lsfml-system -lmdk -lgbm mdktest.o -Llib/
+

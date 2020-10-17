@@ -6,11 +6,6 @@
 #include <SFML/Graphics.hpp>
 #include "mdk/Player.h"
 
-//dsym hack1 0001CB60
-//dsym hack2 00015BB1
-//so.0 hack2 00015BB1
-//so.0 hack1 0001CB60
-
 using namespace std;
 using namespace MDK_NS;
 
@@ -27,12 +22,16 @@ Player player;
 sf::RenderWindow window;
 sf::RenderTexture texture;
 sf::Sprite sprite;
-float frame_rate_vid = 0.0;
-float frame_time_vid = 0.0;
-const float frame_time_display = 1000.0 / 60.0;
-float frame_time_counter = 0.0;
+float vid_frame_rate = 0.0;
+float vid_frame_time = 0.0;
+const float disp_frame_time = 1000.0 / 60.0;
+float counter_frame_time = 0.0;
+int vid_sample_rate = 0;
 std::vector<std::string> files;
+sf::Context vid_context;
+sf::Mutex mutex;
 
+int frames_ready = 0;
 void load (const char* file)
 {
 	player.setNextMedia(nullptr, -1);
@@ -42,7 +41,7 @@ void load (const char* file)
 	player.setVideoSurfaceSize(-1, -1);
 	player.setPreloadImmediately(true);
 	player.setMedia(file);
-	player.setBufferRange(0, 1000, false);
+	// player.setBufferRange(0, 1000, false);
 	// while (!(player.mediaStatus() & MediaStatus::Loaded));
 	// player.setVideoSurfaceSize(window.getSize().x, window.getSize().y);
 	// player.setState(State::Playing);
@@ -52,15 +51,29 @@ void load (const char* file)
 	// while (!(player.mediaStatus() & MediaStatus::Loaded));
 	// player.setState(State::Paused);
 	player.waitFor(State::Paused);
-	auto& codec = player.mediaInfo().video[0].codec;
-	player.setVideoSurfaceSize(codec.width, codec.height);
-	texture.create(codec.width, codec.height);
+	auto& vid_codec = player.mediaInfo().video[0].codec;
+	auto& aud_codec = player.mediaInfo().audio[0].codec;
+	player.setVideoSurfaceSize(vid_codec.width, vid_codec.height);
+	texture.create(vid_codec.width, vid_codec.height);
 	texture.setSmooth(true);
 	texture.display();
 
-	frame_rate_vid = player.mediaInfo().video[0].codec.frame_rate + 0.0001;
-	frame_time_vid = 1000.0 / player.mediaInfo().video[0].codec.frame_rate;
-	frame_time_counter = 0.0;
+	// player.setRenderCallback([=](void*){
+	// 	frames_ready = 1;
+	// 	// sf::Lock lock(mutex);
+	// 	// vid_context.setActive(true);
+	// 	// texture.setActive(true);
+	// 	// // QCALL(player.renderVideo());
+	// 	// player.renderVideo();
+	// 	// texture.display();
+	// 	// texture.setActive(false);
+	// 	// vid_context.setActive(false);
+	// });
+
+	vid_frame_rate = vid_codec.frame_rate + 0.0001;
+	vid_frame_time = 1000.0 / vid_codec.frame_rate;
+	counter_frame_time = 0.0;
+	vid_sample_rate = aud_codec.sample_rate;
 
 	sprite.setTexture(texture.getTexture(), true);
 	player.setState(State::Playing);
@@ -112,10 +125,11 @@ int main(int argc, char** argv)
 	// 		player.setVideoDecoders({"FFmpeg"});
 	// }
 
+	// player.setVideoDecoders({"MMAL", "FFmpeg"});
 	player.setVideoDecoders({"FFmpeg"});
 
 	int file_idx = 0;
-	load(files[0].c_str());
+	load(files[file_idx].c_str());
 
 	sf::Font font;
 	font.loadFromFile("segoeui.ttf");
@@ -155,26 +169,44 @@ int main(int argc, char** argv)
 
 		// texture.clear(sf::Color::Red);
 
-		text.setString(to_string(texture.getSize().x) + " x " + to_string(texture.getSize().y) + " @ " + to_string(frame_rate_vid).substr(0, std::to_string(frame_rate_vid).find(".") + 3));
+		text.setString(
+			"[File: " +
+			to_string(file_idx) +
+			"] " +
+			to_string(texture.getSize().x) +
+			" x " +
+			to_string(texture.getSize().y) +
+			" @ " +
+			to_string(vid_frame_rate).substr(0, to_string(vid_frame_rate).find(".") + 3) +
+			" Audio:" +
+			to_string(vid_sample_rate));
 
-		if (frame_time_counter <= 0.0)
+		if (counter_frame_time <= 0.0)
+		// if ( frames_ready == 1 )
 		{
-			frame_time_counter += frame_time_vid;
-			window.setActive(false);
+			counter_frame_time += vid_frame_time;
+			// window.setActive(false);
+			// sf::Lock lock(mutex);
+			vid_context.setActive(true);
 			texture.setActive(true);
-			QCALL(player.renderVideo());
+			// QCALL(player.renderVideo());
+			player.renderVideo();
 			texture.display();
 			texture.setActive(false);
-			window.setActive(true);
-			player.setPlaybackRate(1.0);
+			vid_context.setActive(false);
+			// window.setActive(true);
+
+			// player.setPlaybackRate(44100.0/48000.0);
 			// sprite.setTexture(texture.getTexture());
+			// frames_ready = 0;
 		}
 		// else
-		// 	text.setString(std::to_string(frame_time_counter));
+		// 	text.setString(std::to_string(counter_frame_time));
 
-		frame_time_counter -= frame_time_display;
+		counter_frame_time -= disp_frame_time;
 
 		// window.clear(sf::Color::Blue);
+		// window.setActive(true);
 		window.clear();
 		float scalex = (float)window.getSize().x / (float)texture.getSize().x;
 		float scaley = (float)window.getSize().y / (float)texture.getSize().y;
